@@ -12,6 +12,10 @@ lib/
 es/
 *.tsbuildinfo
 
+# Project-specific files
+uixio
+uixio.pub
+
 # Environment variables
 .env
 .env.local
