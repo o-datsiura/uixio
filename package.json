@@ -1,7 +1,7 @@
 {
   "name": "uixio",
   "version": "1.0.0",
-  "description": "A modern, lightweight React component library built with React 19, TypeScript, and Vite",
+  "description": "🚀 Modern React 19 component library with TypeScript, Vite, and OXC linter. Lightweight, tree-shakable, and ready for production.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -39,12 +39,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/uixio.git"
+    "url": "https://github.com/o-datsiura/uixio.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/uixio/issues"
+    "url": "https://github.com/o-datsiura/uixio/issues"
   },
-  "homepage": "https://github.com/your-username/uixio#readme",
+  "homepage": "https://github.com/o-datsiura/uixio#readme",
   "peerDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
