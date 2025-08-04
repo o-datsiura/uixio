@@ -1,0 +1,67 @@
+{
+  "name": "uixio",
+  "version": "1.0.0",
+  "description": "A modern, lightweight React component library built with React 19, TypeScript, and Vite",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run clean && pnpm run build"
+  },
+  "keywords": [
+    "react",
+    "react19",
+    "typescript",
+    "component-library",
+    "ui",
+    "vite",
+    "oxc"
+  ],
+  "author": "uixio",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/uixio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/uixio/issues"
+  },
+  "homepage": "https://github.com/your-username/uixio#readme",
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "oxlint": "^1.9.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "terser": "^5.43.1",
+    "typescript": "^5.5.0",
+    "vite": "^5.3.0",
+    "vite-plugin-dts": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
