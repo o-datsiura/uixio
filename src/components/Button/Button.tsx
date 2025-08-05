@@ -30,7 +30,6 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const classes = `${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`.trim();
-  console.log(1112);
 
   return (
     <button className={classes} {...props}>
