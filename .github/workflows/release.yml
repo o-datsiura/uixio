@@ -8,46 +8,46 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          registry-url: 'https://registry.npmjs.org'
-      
+          node-version: "18"
+          registry-url: "https://registry.npmjs.org"
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: latest
-      
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      
+
       - name: Run linting
         run: pnpm run lint
-      
+
       - name: Run type checking
         run: pnpm run type-check
-      
-      - name: Extract version from commit message
+
+      - name: Extract version from commit subject via git
         id: extract-version
+        shell: bash
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          if [[ $COMMIT_MSG =~ #v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            VERSION="${BASH_REMATCH[1]}"
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "Found version: $VERSION"
+          set -Eeuo pipefail
+          SUBJECT="$(git log -1 --pretty=%s)"
+          echo "Subject: $SUBJECT"
+          if [[ "$SUBJECT" =~ \#v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           else
-            echo "No version tag found in commit message: $COMMIT_MSG"
-            echo "version=" >> $GITHUB_OUTPUT
+            echo "version=" >> "$GITHUB_OUTPUT"
           fi
-      
+
       - name: Create Git tag
         if: steps.extract-version.outputs.version != ''
         run: |
@@ -55,22 +55,22 @@ jobs:
           git config --local user.name "GitHub Action"
           git tag -a "v${{ steps.extract-version.outputs.version }}" -m "Release v${{ steps.extract-version.outputs.version }}"
           git push origin "v${{ steps.extract-version.outputs.version }}"
-      
+
       - name: Update package.json version
         if: steps.extract-version.outputs.version != ''
         run: |
           pnpm version ${{ steps.extract-version.outputs.version }} --no-git-tag-version
-      
+
       - name: Build library
         if: steps.extract-version.outputs.version != ''
         run: pnpm run build
-      
+
       - name: Publish to npm
         if: steps.extract-version.outputs.version != ''
         run: pnpm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      
+
       - name: Create Release
         if: steps.extract-version.outputs.version != ''
         uses: actions/create-release@v1
@@ -81,15 +81,15 @@ jobs:
           release_name: Release v${{ steps.extract-version.outputs.version }}
           body: |
             ## What's Changed
-            
+
             This release includes:
             - Automated release via GitHub Actions
             - Version ${{ steps.extract-version.outputs.version }}
-            
+
             ## Installation
-            
+
             ```bash
             npm install uixio@${{ steps.extract-version.outputs.version }}
             ```
           draft: false
-          prerelease: false 
+          prerelease: false
