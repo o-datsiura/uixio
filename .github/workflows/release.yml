@@ -62,7 +62,6 @@ jobs:
           fi
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
 
-          # Determine bump type
           if echo "$COMMITS" | grep -q "BREAKING CHANGE"; then
             BUMP="major"
           elif echo "$COMMITS" | grep -Eq '^.*!:|^feat(\(|:)'; then
@@ -74,9 +73,8 @@ jobs:
           elif echo "$COMMITS" | grep -Eq '^fix(\(|:)|^perf(\(|:)'; then
             BUMP="patch"
           else
-            # Якщо є alpha/beta, даємо patch, інакше skip
             if [[ "$CHANNEL" == "alpha" || "$CHANNEL" == "beta" ]]; then
-              BUMP="patch"
+              BUMP="prerelease"
             else
               echo "No release-worthy changes found"
               echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -85,7 +83,6 @@ jobs:
           fi
           echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
 
-          # Compute next stable base version (x.y.z)
           if LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null); then
             BASE_FROM_TAG="${LAST_TAG#v}"
             CLEAN_VERSION="$(echo "$BASE_FROM_TAG" | cut -d '-' -f 1)"
