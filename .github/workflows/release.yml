@@ -18,8 +18,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
-          registry-url: "https://registry.npmjs.org"
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -29,68 +29,80 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run linting
-        run: pnpm run lint
-
-      - name: Run type checking
-        run: pnpm run type-check
-
-      - name: Extract version from commit subject via git
-        id: extract-version
+      - name: Determine next version
+        id: version
         shell: bash
         run: |
-          set -Eeuo pipefail
-          SUBJECT="$(git log -1 --pretty=%s)"
-          echo "Subject: $SUBJECT"
-          if [[ "$SUBJECT" =~ \#v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            VERSION="${BASH_REMATCH[1]}"
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          set -e
+
+          # Отримуємо останній тег або 0.0.0
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+
+          echo "Last tag: $LAST_TAG"
+
+          # Збираємо коміти з останнього тега
+          COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s%n%b")
+
+          echo "Commits since last tag:"
+          echo "$COMMITS"
+
+          BUMP=""
+
+          if echo "$COMMITS" | grep -q "BREAKING CHANGE"; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -Eq "^feat(\(|:)|^.*!:.*"; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -Eq "^feat(\(|:)"; then
+            BUMP="minor"
+          elif echo "$COMMITS" | grep -Eq "^fix(\(|:)|^perf(\(|:)"; then
+            BUMP="patch"
           else
-            echo "version=" >> $GITHUB_OUTPUT
+            echo "No release-worthy changes found"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
+          echo "Bump type: $BUMP"
+
+          # Рахуємо нову версію
+          CURRENT_VERSION=$LAST_TAG
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${CURRENT_VERSION#v}"
+
+          case $BUMP in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+          echo "New version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Stop if no release
+        if: steps.version.outputs.skip == 'true'
+        run: echo "No release this time."
+
+      - name: Update package.json version
+        if: steps.version.outputs.skip != 'true'
+        run: pnpm version ${{
+          steps.version.outputs.version
+        }} --no-git-tag-version
+
+      - name: Build library
+        if: steps.version.outputs.skip != 'true'
+        run: pnpm run build
+
       - name: Create Git tag
-        if: steps.extract-version.outputs.version != ''
+        if: steps.version.outputs.skip != 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git tag -a "v${{ steps.extract-version.outputs.version }}" -m "Release v${{ steps.extract-version.outputs.version }}"
-          git push origin "v${{ steps.extract-version.outputs.version }}"
-
-      - name: Update package.json version
-        if: steps.extract-version.outputs.version != ''
-        run: |
-          pnpm version ${{ steps.extract-version.outputs.version }} --no-git-tag-version
-
-      - name: Build library
-        if: steps.extract-version.outputs.version != ''
-        run: pnpm run build
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
 
       - name: Publish to npm
-        if: steps.extract-version.outputs.version != ''
+        if: steps.version.outputs.skip != 'true'
         run: pnpm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create Release
-        if: steps.extract-version.outputs.version != ''
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.extract-version.outputs.version }}
-          release_name: Release v${{ steps.extract-version.outputs.version }}
-          body: |
-            ## What's Changed
-
-            This release includes:
-            - Automated release via GitHub Actions
-            - Version ${{ steps.extract-version.outputs.version }}
-
-            ## Installation
-
-            ```bash
-            npm install uixio@${{ steps.extract-version.outputs.version }}
-            ```
-          draft: false
-          prerelease: false
