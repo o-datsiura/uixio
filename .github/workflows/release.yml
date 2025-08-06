@@ -35,89 +35,158 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Determine next version (Conventional Commits)
-        id: version
+      - name: Detect channel and bump type
+        id: detect
         shell: bash
         run: |
           set -Eeuo pipefail
 
+          # ==== Determine range of commits since last tag ====
           if LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null); then
-            echo "Last tag: $LAST_TAG"
             RANGE="${LAST_TAG}..HEAD"
           else
-            echo "No tags found yet"
-            RANGE="$(git rev-list --max-parents=0 HEAD)..HEAD"  # всі коміти від першого
+            RANGE="$(git rev-list --max-parents=0 HEAD)..HEAD"
           fi
 
-          COMMITS="$(git log ${RANGE} --pretty=format:"%s%n%b")"
-          echo "Commits since last tag (or root):"
+          COMMITS="$(git log ${RANGE} --pretty=format:'%s%n%b')"
+          echo "Commits in range:"
           echo "$COMMITS"
 
-          BUMP=""
+          # ==== Channel by commit flags ====
+          if echo "$COMMITS" | grep -qi '\[alpha\]'; then
+            CHANNEL="alpha"
+          elif echo "$COMMITS" | grep -qi '\[beta\]'; then
+            CHANNEL="beta"
+          else
+            CHANNEL="latest"
+          fi
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+
+          # ==== Bump type by Conventional Commits ====
           if echo "$COMMITS" | grep -q "BREAKING CHANGE"; then
             BUMP="major"
-          elif echo "$COMMITS" | grep -Eq "^feat(\(|:)|^.*!:.*"; then
-            BUMP="major"
-          elif echo "$COMMITS" | grep -Eq "^feat(\(|:)"; then
-            BUMP="minor"
-          elif echo "$COMMITS" | grep -Eq "^fix(\(|:)|^perf(\(|:)"; then
+          elif echo "$COMMITS" | grep -Eq '^.*!:|^feat(\(|:)'; then
+            if echo "$COMMITS" | grep -Eq '^.*!:'; then
+              BUMP="major"
+            else
+              BUMP="minor"
+            fi
+          elif echo "$COMMITS" | grep -Eq '^fix(\(|:)|^perf(\(|:)'; then
             BUMP="patch"
           else
             echo "No release-worthy changes found"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
 
-          if [ -n "${LAST_TAG:-}" ]; then
-            CLEAN_VERSION=$(echo "${LAST_TAG#v}" | cut -d '-' -f 1)
+          # ==== Compute next stable base (x.y.z) ====
+          if LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null); then
+            BASE_FROM_TAG="${LAST_TAG#v}"
+            CLEAN_VERSION="$(echo "$BASE_FROM_TAG" | cut -d '-' -f 1)"
           else
             CLEAN_VERSION="0.0.0"
           fi
 
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CLEAN_VERSION"
-
           case "$BUMP" in
             major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
             minor) MINOR=$((MINOR+1)); PATCH=0 ;;
             patch) PATCH=$((PATCH+1)) ;;
           esac
-
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "Bump type: $BUMP → New version: $NEW_VERSION"
-
-          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          NEXT_STABLE="${MAJOR}.${MINOR}.${PATCH}"
+          echo "next_stable=$NEXT_STABLE" >> "$GITHUB_OUTPUT"
 
       - name: Stop if no release
-        if: steps.version.outputs.skip == 'true'
+        if: steps.detect.outputs.skip == 'true'
         run: echo "No release this time."
 
-      - name: Configure git author (for commits)
-        if: steps.version.outputs.skip != 'true'
+      - name: Configure git author
+        if: steps.detect.outputs.skip != 'true'
         run: |
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
 
-      - name: Update package.json version (no auto-commit)
-        if: steps.version.outputs.skip != 'true'
-        run: pnpm version ${{ steps.version.outputs.version }} --no-git-tag-version --no-commit
+      - name: Determine next prerelease index (only for alpha/beta)
+        if: steps.detect.outputs.skip != 'true' && steps.detect.outputs.channel != 'latest'
+        id: preidx
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CHANNEL="${{ steps.detect.outputs.channel }}"
+          NEXT_STABLE="${{ steps.detect.outputs.next_stable }}"
+
+          # Find the highest N for tags like vX.Y.Z-alpha.N (or beta.N)
+          BASE="v${NEXT_STABLE}-${CHANNEL}"
+          LAST_MATCHING_TAG=$(git tag --list "${BASE}.*" | sort -V | tail -n1 || true)
+
+          if [ -n "$LAST_MATCHING_TAG" ]; then
+            # Extract N from vX.Y.Z-alpha.N
+            LAST_N="${LAST_MATCHING_TAG##*.}"
+            if [[ "$LAST_N" =~ ^[0-9]+$ ]]; then
+              NEXT_N=$((LAST_N+1))
+            else
+              NEXT_N=0
+            fi
+          else
+            NEXT_N=0
+          fi
+
+          VERSION="${NEXT_STABLE}-${CHANNEL}.${NEXT_N}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "Calculated prerelease: $VERSION"
+
+      - name: Bump version in package.json
+        if: steps.detect.outputs.skip != 'true'
+        id: bump
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CHANNEL="${{ steps.detect.outputs.channel }}"
+          NEXT_STABLE="${{ steps.detect.outputs.next_stable }}"
+
+          if [ "$CHANNEL" = "latest" ]; then
+            TARGET_VERSION="$NEXT_STABLE"
+            TARGET_TAG="latest"
+          else
+            TARGET_VERSION="${{ steps.preidx.outputs.version }}"
+            TARGET_TAG="${{ steps.preidx.outputs.tag }}"
+          fi
+
+          pnpm version "$TARGET_VERSION" --no-git-tag-version --no-commit
+
+          # Read back to confirm
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
+          echo "Bumped to $NEW_VERSION (tag: $TARGET_TAG)"
 
       - name: Build library
-        if: steps.version.outputs.skip != 'true'
+        if: steps.detect.outputs.skip != 'true'
         run: pnpm run build
 
-      - name: Commit and push version bump
-        if: steps.version.outputs.skip != 'true'
+      - name: Commit version bump
+        if: steps.detect.outputs.skip != 'true'
         run: |
           git add package.json package-lock.json pnpm-lock.yaml 2>/dev/null || true
           if ! git diff --cached --quiet; then
-            git commit -m "chore(release): v${{ steps.version.outputs.version }}"
+            git commit -m "chore(release): v${{ steps.bump.outputs.version }}"
             git push origin HEAD:main
           else
             echo "No version file changes to commit."
           fi
 
-      - name: Create Git tag
-        if: steps.version.outputs.skip != 'true'
+      - name: Create and push Git tag
+        if: steps.detect.outputs.skip != 'true'
         run: |
-          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
+          git tag -a "v${{ steps.bump.outputs.version }}" -m "Release v${{ steps.bump.outputs.version }}"
+          git push origin "v${{ steps.bump.outputs.version }}"
+
+      - name: Publish to npm
+        if: steps.detect.outputs.skip != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm config set //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+          pnpm publish --access public --tag "${{ steps.bump.outputs.tag }}"
