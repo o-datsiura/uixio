@@ -1,5 +1,0 @@
-packages:
-  - '.'
-  # Add other packages here if you expand to a monorepo
-  # - 'packages/*'
-  # - 'examples/*' 

@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write  # щоб пушити теги і коміти від імені GITHUB_TOKEN
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -14,12 +17,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # persist-credentials: true  # за замовчуванням true, залишаємо
+
+      - name: Fetch tags
+        run: git fetch --tags --force
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: "18"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -29,25 +36,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Determine next version
+      - name: Determine next version (Conventional Commits)
         id: version
         shell: bash
         run: |
-          set -e
+          set -Eeuo pipefail
 
-          # Отримуємо останній тег або 0.0.0
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+          # Останній тег або порожньо, якщо тегів нема
+          if LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null); then
+            echo "Last tag: $LAST_TAG"
+            RANGE="${LAST_TAG}..HEAD"
+          else
+            echo "No tags found yet"
+            RANGE="$(git rev-list --max-parents=0 HEAD)..HEAD"  # з першого коміту
+          fi
 
-          echo "Last tag: $LAST_TAG"
-
-          # Збираємо коміти з останнього тега
-          COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s%n%b")
-
-          echo "Commits since last tag:"
+          COMMITS="$(git log ${RANGE} --pretty=format:"%s%n%b")"
+          echo "Commits since last tag (or root):"
           echo "$COMMITS"
 
           BUMP=""
-
           if echo "$COMMITS" | grep -q "BREAKING CHANGE"; then
             BUMP="major"
           elif echo "$COMMITS" | grep -Eq "^feat(\(|:)|^.*!:.*"; then
@@ -62,42 +70,57 @@ jobs:
             exit 0
           fi
 
-          echo "Bump type: $BUMP"
+          # Поточна версія (з тега або 0.0.0)
+          if [ -n "${LAST_TAG:-}" ]; then
+            CURRENT_VERSION="${LAST_TAG#v}"
+          else
+            CURRENT_VERSION="0.0.0"
+          fi
 
-          # Рахуємо нову версію
-          CURRENT_VERSION=$LAST_TAG
-          IFS='.' read -r MAJOR MINOR PATCH <<< "${CURRENT_VERSION#v}"
-
-          case $BUMP in
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          case "$BUMP" in
             major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
             minor) MINOR=$((MINOR+1)); PATCH=0 ;;
             patch) PATCH=$((PATCH+1)) ;;
           esac
 
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "Bump type: $BUMP → New version: $NEW_VERSION"
 
-          echo "New version: $NEW_VERSION"
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Stop if no release
         if: steps.version.outputs.skip == 'true'
         run: echo "No release this time."
 
-      - name: Update package.json version
+      - name: Configure git author (for commits)
         if: steps.version.outputs.skip != 'true'
-        run: pnpm version ${{
-          steps.version.outputs.version
-        }} --no-git-tag-version
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+
+      - name: Update package.json version (no auto-commit)
+        if: steps.version.outputs.skip != 'true'
+        run: pnpm version ${{ steps.version.outputs.version }} --no-git-tag-version --no-commit
 
       - name: Build library
         if: steps.version.outputs.skip != 'true'
         run: pnpm run build
 
+      - name: Commit and push version bump
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          git add package.json package-lock.json pnpm-lock.yaml 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): v${{ steps.version.outputs.version }}"
+            git push origin HEAD:main
+          else
+            echo "No version file changes to commit."
+          fi
+
       - name: Create Git tag
         if: steps.version.outputs.skip != 'true'
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
 
