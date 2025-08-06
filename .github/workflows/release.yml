@@ -197,7 +197,7 @@ jobs:
         run: |
           git add package.json package-lock.json pnpm-lock.yaml 2>/dev/null || true
           if ! git diff --cached --quiet; then
-            git commit -m "Release: v${{ steps.bump.outputs.version }}"
+            git commit -m "v${{ steps.bump.outputs.version }}"
             git push origin HEAD:main
           else
             echo "No version file changes to commit."
