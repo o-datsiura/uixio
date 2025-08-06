@@ -50,6 +50,13 @@ jobs:
           echo "Commits in range:"
           echo "$COMMITS"
 
+          if echo "$COMMITS" | grep -qi '\[release\]'; then
+            RELEASE_TRIGGERED=true
+          else
+            RELEASE_TRIGGERED=false
+          fi
+          echo "release_triggered=$RELEASE_TRIGGERED" >> "$GITHUB_OUTPUT"
+
           if echo "$COMMITS" | grep -qi '\[alpha\]'; then
             CHANNEL="alpha"
           elif echo "$COMMITS" | grep -qi '\[beta\]'; then
@@ -122,6 +129,18 @@ jobs:
           git commit -m "release: v$TARGET_VERSION"
           git tag -a "v$TARGET_VERSION" -m "Release v$TARGET_VERSION"
           git push origin HEAD:main --tags
+
+      - name: Create GitHub Release
+        if: steps.detect.outputs.release_triggered == 'true' && steps.detect.outputs.skip != 'true'
+        uses: actions/create-release@v1
+        with:
+          tag_name: "v${{ steps.detect.outputs.version }}"
+          release_name: "v${{ steps.detect.outputs.version }}"
+          body: "Automated release created by GitHub Actions"
+          draft: false
+          prerelease: ${{ contains(steps.detect.outputs.version, '-alpha') || contains(steps.detect.outputs.version, '-beta') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build library
         if: steps.detect.outputs.skip != 'true'
