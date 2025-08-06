@@ -188,6 +188,9 @@ jobs:
           git tag -a "v${{ steps.bump.outputs.version }}" -m "Release v${{ steps.bump.outputs.version }}"
           git push origin "v${{ steps.bump.outputs.version }}"
 
+      - name: Sync version in package.json
+        run: pnpm version "${{ steps.bump.outputs.version }}" --no-git-tag-version --no-commit
+
       - name: Publish to npm
         if: steps.detect.outputs.skip != 'true'
         env:
