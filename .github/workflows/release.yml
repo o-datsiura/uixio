@@ -193,6 +193,16 @@ jobs:
           TARGET_VERSION="${{ steps.bump.outputs.version }}"
           node -e "let pkg=require('./package.json');pkg.version='$TARGET_VERSION';require('fs').writeFileSync('./package.json', JSON.stringify(pkg,null,2)+'\n')"
 
+      - name: Commit version bump
+        run: |
+          git add package.json package-lock.json pnpm-lock.yaml 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "Release: v${{ steps.bump.outputs.version }}"
+            git push origin HEAD:main
+          else
+            echo "No version file changes to commit."
+          fi
+
       - name: Publish to npm
         if: steps.detect.outputs.skip != 'true'
         env:
