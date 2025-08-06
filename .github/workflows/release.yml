@@ -41,7 +41,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          # ==== Determine range of commits since last tag ====
+          # Determine range of commits since last tag
           if LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null); then
             RANGE="${LAST_TAG}..HEAD"
           else
@@ -52,7 +52,7 @@ jobs:
           echo "Commits in range:"
           echo "$COMMITS"
 
-          # ==== Channel by commit flags ====
+          # Determine release channel by commit flags
           if echo "$COMMITS" | grep -qi '\[alpha\]'; then
             CHANNEL="alpha"
           elif echo "$COMMITS" | grep -qi '\[beta\]'; then
@@ -62,7 +62,7 @@ jobs:
           fi
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
 
-          # ==== Bump type by Conventional Commits ====
+          # Determine bump type
           if echo "$COMMITS" | grep -q "BREAKING CHANGE"; then
             BUMP="major"
           elif echo "$COMMITS" | grep -Eq '^.*!:|^feat(\(|:)'; then
@@ -74,13 +74,18 @@ jobs:
           elif echo "$COMMITS" | grep -Eq '^fix(\(|:)|^perf(\(|:)'; then
             BUMP="patch"
           else
-            echo "No release-worthy changes found"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
+            # Якщо є alpha/beta, даємо patch, інакше skip
+            if [[ "$CHANNEL" == "alpha" || "$CHANNEL" == "beta" ]]; then
+              BUMP="patch"
+            else
+              echo "No release-worthy changes found"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           fi
           echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
 
-          # ==== Compute next stable base (x.y.z) ====
+          # Compute next stable base version (x.y.z)
           if LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null); then
             BASE_FROM_TAG="${LAST_TAG#v}"
             CLEAN_VERSION="$(echo "$BASE_FROM_TAG" | cut -d '-' -f 1)"
@@ -116,26 +121,30 @@ jobs:
           CHANNEL="${{ steps.detect.outputs.channel }}"
           NEXT_STABLE="${{ steps.detect.outputs.next_stable }}"
 
-          # Find the highest N for tags like vX.Y.Z-alpha.N (or beta.N)
           BASE="v${NEXT_STABLE}-${CHANNEL}"
-          LAST_MATCHING_TAG=$(git tag --list "${BASE}.*" | sort -V | tail -n1 || true)
 
-          if [ -n "$LAST_MATCHING_TAG" ]; then
-            # Extract N from vX.Y.Z-alpha.N
-            LAST_N="${LAST_MATCHING_TAG##*.}"
-            if [[ "$LAST_N" =~ ^[0-9]+$ ]]; then
-              NEXT_N=$((LAST_N+1))
-            else
-              NEXT_N=0
-            fi
-          else
+          # List tags matching BASE or BASE.N (e.g. v1.2.3-alpha or v1.2.3-alpha.0)
+          TAGS=$(git tag --list "${BASE}*")
+          if [ -z "$TAGS" ]; then
             NEXT_N=0
+          else
+            LAST_MATCHING_TAG=$(echo "$TAGS" | sort -V | tail -n1)
+            if [ "$LAST_MATCHING_TAG" = "$BASE" ]; then
+              NEXT_N=1
+            else
+              LAST_N="${LAST_MATCHING_TAG##*.}"
+              if [[ "$LAST_N" =~ ^[0-9]+$ ]]; then
+                NEXT_N=$((LAST_N+1))
+              else
+                NEXT_N=0
+              fi
+            fi
           fi
 
           VERSION="${NEXT_STABLE}-${CHANNEL}.${NEXT_N}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "Calculated prerelease: $VERSION"
+          echo "Calculated prerelease version: $VERSION"
 
       - name: Bump version in package.json
         if: steps.detect.outputs.skip != 'true'
@@ -156,7 +165,6 @@ jobs:
 
           pnpm version "$TARGET_VERSION" --no-git-tag-version --no-commit
 
-          # Read back to confirm
           NEW_VERSION=$(node -p "require('./package.json').version")
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
