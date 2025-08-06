@@ -1,4 +1,4 @@
-name: Release and Publish
+name: Release
 
 on:
   push:
@@ -25,7 +25,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-          registry-url: "https://registry.npmjs.org"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -41,7 +40,6 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          # Determine range of commits since last tag
           if LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null); then
             RANGE="${LAST_TAG}..HEAD"
           else
@@ -52,7 +50,6 @@ jobs:
           echo "Commits in range:"
           echo "$COMMITS"
 
-          # Determine release channel by commit flags
           if echo "$COMMITS" | grep -qi '\[alpha\]'; then
             CHANNEL="alpha"
           elif echo "$COMMITS" | grep -qi '\[beta\]'; then
@@ -74,7 +71,7 @@ jobs:
             BUMP="patch"
           else
             if [[ "$CHANNEL" == "alpha" || "$CHANNEL" == "beta" ]]; then
-              BUMP="prerelease"
+              BUMP="patch"
             else
               echo "No release-worthy changes found"
               echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -96,8 +93,13 @@ jobs:
             minor) MINOR=$((MINOR+1)); PATCH=0 ;;
             patch) PATCH=$((PATCH+1)) ;;
           esac
-          NEXT_STABLE="${MAJOR}.${MINOR}.${PATCH}"
-          echo "next_stable=$NEXT_STABLE" >> "$GITHUB_OUTPUT"
+          BASE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+          if [ "$CHANNEL" != "latest" ]; then
+            BASE_VERSION="${BASE_VERSION}-${CHANNEL}"
+          fi
+
+          echo "version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Stop if no release
         if: steps.detect.outputs.skip == 'true'
@@ -109,104 +111,16 @@ jobs:
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
 
-      - name: Determine next prerelease index (only for alpha/beta)
-        if: steps.detect.outputs.skip != 'true' && steps.detect.outputs.channel != 'latest'
-        id: preidx
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          CHANNEL="${{ steps.detect.outputs.channel }}"
-          NEXT_STABLE="${{ steps.detect.outputs.next_stable }}"
-
-          BASE="v${NEXT_STABLE}-${CHANNEL}"
-
-          # List tags matching BASE or BASE.N (e.g. v1.2.3-alpha or v1.2.3-alpha.0)
-          TAGS=$(git tag --list "${BASE}*")
-          if [ -z "$TAGS" ]; then
-            NEXT_N=0
-          else
-            LAST_MATCHING_TAG=$(echo "$TAGS" | sort -V | tail -n1)
-            if [ "$LAST_MATCHING_TAG" = "$BASE" ]; then
-              NEXT_N=1
-            else
-              LAST_N="${LAST_MATCHING_TAG##*.}"
-              if [[ "$LAST_N" =~ ^[0-9]+$ ]]; then
-                NEXT_N=$((LAST_N+1))
-              else
-                NEXT_N=0
-              fi
-            fi
-          fi
-
-          VERSION="${NEXT_STABLE}-${CHANNEL}.${NEXT_N}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "Calculated prerelease version: $VERSION"
-
-      - name: Bump version in package.json
+      - name: Bump version in package.json and commit
         if: steps.detect.outputs.skip != 'true'
-        id: bump
-        shell: bash
         run: |
-          set -Eeuo pipefail
-          CHANNEL="${{ steps.detect.outputs.channel }}"
-          NEXT_STABLE="${{ steps.detect.outputs.next_stable }}"
-
-          if [ "$CHANNEL" = "latest" ]; then
-            TARGET_VERSION="$NEXT_STABLE"
-            TARGET_TAG="latest"
-          else
-            TARGET_VERSION="${{ steps.preidx.outputs.version }}"
-            TARGET_TAG="${{ steps.preidx.outputs.tag }}"
-          fi
-
-          pnpm version "$TARGET_VERSION" --no-git-tag-version --no-commit
-
-          NEW_VERSION=$(node -p "require('./package.json').version")
-          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
-          echo "Bumped to $NEW_VERSION (tag: $TARGET_TAG)"
+          TARGET_VERSION="${{ steps.detect.outputs.version }}"
+          pnpm version "$TARGET_VERSION" --no-git-tag-version
+          git add package.json
+          git commit -m "release: v$TARGET_VERSION"
+          git tag -a "v$TARGET_VERSION" -m "Release v$TARGET_VERSION"
+          git push origin HEAD:main --tags
 
       - name: Build library
         if: steps.detect.outputs.skip != 'true'
         run: pnpm run build
-
-      - name: Commit version bump
-        if: steps.detect.outputs.skip != 'true'
-        run: |
-          git add package.json package-lock.json pnpm-lock.yaml 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m "chore(release): v${{ steps.bump.outputs.version }}"
-            git push origin HEAD:main
-          else
-            echo "No version file changes to commit."
-          fi
-
-      - name: Create and push Git tag
-        if: steps.detect.outputs.skip != 'true'
-        run: |
-          git tag -a "v${{ steps.bump.outputs.version }}" -m "Release v${{ steps.bump.outputs.version }}"
-          git push origin "v${{ steps.bump.outputs.version }}"
-
-      - name: Sync version in package.json
-        run: |
-          TARGET_VERSION="${{ steps.bump.outputs.version }}"
-          node -e "let pkg=require('./package.json');pkg.version='$TARGET_VERSION';require('fs').writeFileSync('./package.json', JSON.stringify(pkg,null,2)+'\n')"
-
-      - name: Commit version bump
-        run: |
-          git add package.json package-lock.json pnpm-lock.yaml 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m "v${{ steps.bump.outputs.version }}"
-            git push origin HEAD:main
-          else
-            echo "No version file changes to commit."
-          fi
-
-      - name: Publish to npm
-        if: steps.detect.outputs.skip != 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          npm config set //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
-          pnpm publish --access public --tag "${{ steps.bump.outputs.tag }}"
