@@ -22,6 +22,8 @@
     "preview": "vite preview",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx}\"",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "prepublishOnly": "pnpm run clean && pnpm run build"
@@ -50,10 +52,13 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@prettier/plugin-oxc": "0.0.4",
+    "@types/node": "24.2.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "oxlint": "^1.9.0",
+    "prettier": "3.6.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "terser": "^5.43.1",

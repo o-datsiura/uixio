@@ -1,0 +1,61 @@
+# uixio Component Library - Cursor Rules
+
+## Code Style
+- Use TypeScript for all components
+- Prefer functional components with hooks
+- Use CSS modules for styling
+- Follow kebab-case for file and folder names
+- Use descriptive variable and function names
+
+## Component Structure
+- Each component should be in its own folder
+- Include index.ts for exports
+- Use CSS modules for styling
+- Export types and components from index.ts
+
+## Import/Export Rules
+- Use alias imports (@/ for src, @styles for components)
+- Export components and types from index.ts
+- Avoid default exports, prefer named exports
+
+## Styling Guidelines
+- Use CSS modules for component-specific styles
+- Follow BEM-like naming for CSS classes
+- Keep styles scoped to components
+- Use semantic color names and consistent spacing
+
+## TypeScript Rules
+- Use strict TypeScript configuration
+- Define proper interfaces for component props
+- Use React.FC for functional components
+- Extend HTML element attributes when needed
+
+## File Organization
+- Components in src/components/
+- Types in src/types/
+- Utilities in src/utils/
+- Main exports in src/index.ts
+
+## Naming Conventions
+- Components: PascalCase (Button, Card, etc.)
+- Files: kebab-case (button.tsx, button.module.css)
+- Folders: kebab-case (button/, card/)
+- CSS classes: kebab-case (button-primary, button-large)
+
+## Best Practices
+- Keep components small and focused
+- Use proper prop validation
+- Include accessibility attributes
+- Write clean, readable code
+- Add JSDoc comments for complex functions
+
+## Orval Generated Code Rules
+- Never modify Orval generated files directly
+- Generated files should be in src/generated/ directory
+- Use Orval configuration for customizing generated code
+- Import generated types and hooks from generated directory
+- Add generated files to .gitignore if they should not be committed
+- Use Orval's input/output configuration for API schema
+- Follow Orval naming conventions for generated files
+- Regenerate code when API schema changes
+- Use Orval's override feature for custom modifications 

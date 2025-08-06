@@ -1,0 +1,10 @@
+.custom-class {
+  background-color: #05DCCA;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.custom-class:hover {
+  background-color: #02BCBC;
+}

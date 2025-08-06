@@ -1,5 +1,4 @@
-// Components
-export { Button, type ButtonProps } from './components/Button';
+export type { ReactNode, ComponentProps, FC } from 'react';
 
-// Re-export React types for convenience
-export type { ReactNode, ComponentProps, FC } from 'react'; 
+// Components
+export { Button } from '@/components/button';

@@ -1,0 +1,22 @@
+{
+  "plugins": ["@prettier/plugin-oxc"],
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "printWidth": 80,
+  "overrides": [
+    {
+      "files": "*.{js,jsx}",
+      "options": {
+        "parser": "oxc"
+      }
+    },
+    {
+      "files": "*.{ts,tsx}",
+      "options": {
+        "parser": "typescript"
+      }
+    }
+  ]
+} 
