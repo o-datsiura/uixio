@@ -43,9 +43,10 @@ jobs:
           SUBJECT="$(git log -1 --pretty=%s)"
           echo "Subject: $SUBJECT"
           if [[ "$SUBJECT" =~ \#v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+            VERSION="${BASH_REMATCH[1]}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
           else
-            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "version=" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Git tag
