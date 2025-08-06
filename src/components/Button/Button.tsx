@@ -17,9 +17,6 @@ export const Button: FC<ButtonProps> = ({
     .filter(Boolean)
     .join(' ');
 
-    console.log('test');
-    
-
   return (
     <button className={classes} {...props}>
       {children}
