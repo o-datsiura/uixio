@@ -13,9 +13,7 @@ export const Button: FC<ButtonProps> = ({
   children,
   ...props
 }) => {
-  const classes = [styles['button'], styles[size]]
-    .filter(Boolean)
-    .join(' ');
+  const classes = [styles['button'], styles[size]].filter(Boolean).join(' ');
 
   return (
     <button className={classes} {...props}>
