@@ -1,6 +1,6 @@
 {
   "name": "uixio",
-  "version": "0.2.1",
+  "version": "1.0.0",
   "description": "🚀 Modern React 19 component library with TypeScript, Vite, and OXC linter. Lightweight, tree-shakable, and ready for production.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -49,7 +49,7 @@
   },
   "homepage": "https://github.com/o-datsiura/uixio#readme",
   "peerDependencies": {
-      "react": "^18 || ^19",
+    "react": "^18 || ^19",
     "react-dom": "^18 || ^19"
   },
   "devDependencies": {
